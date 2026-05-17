@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Argon OAuth 测试客户端</title>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --border: #e2e8f0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      padding: 2rem;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 { margin-top: 0; color: var(--primary); }
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin: 10px 5px;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-secondary {
+      background: #64748b;
+    }
+    .btn-secondary:hover { background: #475569; }
+    .provider-group { margin: 1.5rem 0; }
+    .provider-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .provider-btn:hover, .provider-btn.active {
+      border-color: var(--primary);
+      background: #eef2ff;
+      color: var(--primary);
+    }
+    .user-info {
+      text-align: left;
+      background: #f1f5f9;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+    .user-info img {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      margin-right: 1rem;
+      vertical-align: middle;
+    }
+    .user-profile { display: flex; align-items: center; }
+    .token-box {
+      background: #1e293b;
+      color: #cbd5e1;
+      padding: 0.75rem;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin-top: 1rem;
+      text-align: left;
+    }
+    .error { color: #ef4444; margin: 1rem 0; }
+    .hidden { display: none; }
+    .debug { font-size: 0.8rem; color: #64748b; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Argon OAuth 测试</h1>
+    
+    <!-- 登录前界面 -->
+    <div id="login-view">
+      <p>选择一个身份提供商进行登录：</p>
+      
+      <div class="provider-group">
+        <button class="provider-btn active" onclick="selectProvider('github')">
+          <span>🐙</span> GitHub
+        </button>
+        <button class="provider-btn" onclick="selectProvider('cpoauth')">
+          <span>🎮</span> CPOAuth
+        </button>
+        <button class="provider-btn" onclick="selectProvider('arctower')">
+          <span>🗼</span> ArcTower
+        </button>
+      </div>
+
+      <button class="btn" onclick="handleLogin()">开始授权</button>
+      
+      <div id="error-msg" class="error hidden"></div>
+    </div>
+
+    <!-- 登录后界面 -->
+    <div id="user-view" class="hidden">
+      <h2>✅ 登录成功</h2>
+      <div class="user-info">
+        <div class="user-profile">
+          <img id="avatar" src="" alt="Avatar" />
+          <div>
+            <strong id="username">Loading...</strong><br/>
+            <small id="provider-badge" style="color:#64748b"></small>
+          </div>
+        </div>
+        <div style="margin-top:1rem; font-size:0.9rem;">
+          <strong>User ID:</strong> <span id="user-id"></span><br/>
+          <strong>Scope:</strong> <span id="user-scope"></span>
+        </div>
+      </div>
+      
+      <details style="margin-top:1rem; text-align:left;">
+        <summary style="cursor:pointer; color:var(--primary);">🔑 查看 Access Token</summary>
+        <div class="token-box" id="token-display"></div>
+      </details>
+
+      <button class="btn btn-secondary" onclick="handleLogout()" style="margin-top:1.5rem;">退出登录</button>
+    </div>
+
+    <div class="debug">
+      <p>Argon OAuth Endpoint: <strong id="endpoint-display"></strong></p>
+      <p>Client ID: <strong>test-client</strong></p>
+    </div>
+  </div>
+
+  <script>
+    // ================= 配置区域 =================
+    const CONFIG = {
+      // ⚠️ 请修改为你的实际部署域名
+      argonBaseUrl: 'https://argon-oauth.amlg.top',
+      clientId: 'test-client',
+      // 必须与你在 Argon OAuth KV 中注册的 redirectUri 完全一致
+      redirectUri: window.location.origin + window.location.pathname,
+      scopes: ['read:user', 'user:email']
+    };
+
+    // ================= 状态管理 =================
+    let selectedProvider = 'github';
+    
+    // ================= PKCE 工具函数 =================
+    // 生成随机字符串 (Code Verifier)
+    function generateCodeVerifier() {
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    // SHA256 哈希 + Base64URL 编码 (Code Challenge)
+    async function generateCodeChallenge(verifier) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+      const digest = await crypto.subtle.digest('SHA-256', data);
+      return btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+
+    // ================= 核心逻辑 =================
+
+    // 1. 选择提供商
+    function selectProvider(provider) {
+      selectedProvider = provider;
+      document.querySelectorAll('.provider-btn').forEach(btn => btn.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+    }
+
+    // 2. 处理登录点击
+    async function handleLogin() {
+      showError('');
+      
+      // 生成 PKCE 参数
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+      
+      // 保存 verifier 到 sessionStorage (回调时会用到)
+      sessionStorage.setItem('argon_code_verifier', codeVerifier);
+      
+      // 生成 state 防止 CSRF
+      const state = btoa(crypto.randomUUID()).replace(/=/g, '');
+      sessionStorage.setItem('argon_state', state);
+
+      // 构造授权 URL
+      const params = new URLSearchParams({
+        client_id: CONFIG.clientId,
+        redirect_uri: CONFIG.redirectUri,
+        response_type: 'code',
+        scope: CONFIG.scopes.join(' '),
+        state: state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        provider: selectedProvider
+      });
+
+      const authUrl = `${CONFIG.argonBaseUrl}/oauth/authorize?${params.toString()}`;
+      console.log('Redirecting to:', authUrl);
+      
+      // 跳转
+      window.location.href = authUrl;
+    }
+
+    // 3. 页面加载时检查回调
+    async function init() {
+      document.getElementById('endpoint-display').textContent = CONFIG.argonBaseUrl;
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      const error = urlParams.get('error');
+
+      // 处理授权错误
+      if (error) {
+        showError(`授权失败: ${error} - ${urlParams.get('error_description') || ''}`);
+        return;
+      }
+
+      // 处理成功回调
+      if (code) {
+        // 验证 state
+        const savedState = sessionStorage.getItem('argon_state');
+        if (state !== savedState) {
+          showError('State 验证失败，请求可能被篡改');
+          return;
+        }
+        sessionStorage.removeItem('argon_state');
+
+        // 显示加载中
+        document.getElementById('login-view').classList.add('hidden');
+        document.querySelector('h1').textContent = '处理中...';
+
+        try {
+          await exchangeToken(code);
+        } catch (e) {
+          showError(e.message);
+          document.getElementById('login-view').classList.remove('hidden');
+          document.querySelector('h1').textContent = '🔐 Argon OAuth 测试';
+        }
+      }
+    }
+
+    // 4. 用 Code 交换 Token 并获取用户信息
+    async function exchangeToken(code) {
+      const codeVerifier = sessionStorage.getItem('argon_code_verifier');
+      if (!codeVerifier) throw new Error('未找到 Code Verifier，请重新登录');
+      sessionStorage.removeItem('argon_code_verifier');
+
+      // 请求 Token
+      const tokenRes = await fetch(`${CONFIG.argonBaseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code: code,
+          redirect_uri: CONFIG.redirectUri,
+          client_id: CONFIG.clientId,
+          client_secret: 'test-secret', // ⚠️ 生产环境严禁在前端硬编码 Secret，应通过后端代理
+          code_verifier: codeVerifier
+        })
+      });
+
+      if (!tokenRes.ok) {
+        const err = await tokenRes.json();
+        throw new Error(`Token 交换失败: ${err.error || tokenRes.statusText}`);
+      }
+
+      const tokenData = await tokenRes.json();
+      const accessToken = tokenData.access_token;
+
+      // 请求 UserInfo
+      const userRes = await fetch(`${CONFIG.argonBaseUrl}/oauth/userinfo`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+
+      if (!userRes.ok) throw new Error('获取用户信息失败');
+      
+      const userInfo = await userRes.json();
+      
+      // 渲染界面
+      renderUserInfo(userInfo, accessToken, tokenData.scope);
+    }
+
+    // 5. 渲染用户界面
+    function renderUserInfo(user, token, scope) {
+      document.getElementById('login-view').classList.add('hidden');
+      document.getElementById('user-view').classList.remove('hidden');
+
+      // 填充数据
+      document.getElementById('username').textContent = user.name || user.login || user.sub || 'Unknown';
+      document.getElementById('user-id').textContent = user.id || user.sub;
+      document.getElementById('provider-badge').textContent = `via ${user.provider || 'OAuth'}`;
+      document.getElementById('user-scope').textContent = scope;
+      
+      // 处理头像 (不同提供商字段可能不同)
+      const avatar = user.avatar_url || user.picture || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.login || user.sub || 'U');
+      document.getElementById('avatar').src = avatar;
+
+      // 显示 Token
+      document.getElementById('token-display').textContent = token;
+    }
+
+    // 6. 退出登录
+    function handleLogout() {
+      // 实际 OAuth 中通常没有"登出"端点，只需清除本地状态
+      sessionStorage.clear();
+      location.reload();
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      if (msg) {
+        el.textContent = msg;
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+
+    // 启动
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
