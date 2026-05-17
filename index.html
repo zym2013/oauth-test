@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Argon OAuth 测试客户端</title>
   <style>
     :root {
@@ -13,6 +14,7 @@
       --text: #1e293b;
       --border: #e2e8f0;
     }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
@@ -24,6 +26,7 @@
       margin: 0;
       padding: 20px;
     }
+
     .container {
       background: var(--card);
       border-radius: 12px;
@@ -33,7 +36,12 @@
       width: 100%;
       text-align: center;
     }
-    h1 { margin-top: 0; color: var(--primary); }
+
+    h1 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+
     .btn {
       background: var(--primary);
       color: white;
@@ -45,12 +53,23 @@
       transition: background 0.2s;
       margin: 10px 5px;
     }
-    .btn:hover { background: var(--primary-hover); }
+
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+
     .btn-secondary {
       background: #64748b;
     }
-    .btn-secondary:hover { background: #475569; }
-    .provider-group { margin: 1.5rem 0; }
+
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    .provider-group {
+      margin: 1.5rem 0;
+    }
+
     .provider-btn {
       display: inline-flex;
       align-items: center;
@@ -62,11 +81,14 @@
       cursor: pointer;
       transition: all 0.2s;
     }
-    .provider-btn:hover, .provider-btn.active {
+
+    .provider-btn:hover,
+    .provider-btn.active {
       border-color: var(--primary);
       background: #eef2ff;
       color: var(--primary);
     }
+
     .user-info {
       text-align: left;
       background: #f1f5f9;
@@ -74,6 +96,7 @@
       border-radius: 8px;
       margin-top: 1rem;
     }
+
     .user-info img {
       width: 64px;
       height: 64px;
@@ -81,7 +104,12 @@
       margin-right: 1rem;
       vertical-align: middle;
     }
-    .user-profile { display: flex; align-items: center; }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+    }
+
     .token-box {
       background: #1e293b;
       color: #cbd5e1;
@@ -93,19 +121,32 @@
       margin-top: 1rem;
       text-align: left;
     }
-    .error { color: #ef4444; margin: 1rem 0; }
-    .hidden { display: none; }
-    .debug { font-size: 0.8rem; color: #64748b; margin-top: 2rem; }
+
+    .error {
+      color: #ef4444;
+      margin: 1rem 0;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .debug {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 2rem;
+    }
   </style>
 </head>
+
 <body>
   <div class="container">
     <h1>🔐 Argon OAuth 测试</h1>
-    
+
     <!-- 登录前界面 -->
     <div id="login-view">
       <p>选择一个身份提供商进行登录：</p>
-      
+
       <div class="provider-group">
         <button class="provider-btn active" onclick="selectProvider('github')">
           <span>🐙</span> GitHub
@@ -119,7 +160,7 @@
       </div>
 
       <button class="btn" onclick="handleLogin()">开始授权</button>
-      
+
       <div id="error-msg" class="error hidden"></div>
     </div>
 
@@ -130,16 +171,16 @@
         <div class="user-profile">
           <img id="avatar" src="" alt="Avatar" />
           <div>
-            <strong id="username">Loading...</strong><br/>
+            <strong id="username">Loading...</strong><br />
             <small id="provider-badge" style="color:#64748b"></small>
           </div>
         </div>
         <div style="margin-top:1rem; font-size:0.9rem;">
-          <strong>User ID:</strong> <span id="user-id"></span><br/>
+          <strong>User ID:</strong> <span id="user-id"></span><br />
           <strong>Scope:</strong> <span id="user-scope"></span>
         </div>
       </div>
-      
+
       <details style="margin-top:1rem; text-align:left;">
         <summary style="cursor:pointer; color:var(--primary);">🔑 查看 Access Token</summary>
         <div class="token-box" id="token-display"></div>
@@ -167,7 +208,7 @@
 
     // ================= 状态管理 =================
     let selectedProvider = 'github';
-    
+
     // ================= PKCE 工具函数 =================
     // 生成随机字符串 (Code Verifier)
     function generateCodeVerifier() {
@@ -197,14 +238,14 @@
     // 2. 处理登录点击
     async function handleLogin() {
       showError('');
-      
+
       // 生成 PKCE 参数
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
-      
+
       // 保存 verifier 到 sessionStorage (回调时会用到)
       sessionStorage.setItem('argon_code_verifier', codeVerifier);
-      
+
       // 生成 state 防止 CSRF
       const state = btoa(crypto.randomUUID()).replace(/=/g, '');
       sessionStorage.setItem('argon_state', state);
@@ -223,7 +264,7 @@
 
       const authUrl = `${CONFIG.argonBaseUrl}/oauth/authorize?${params.toString()}`;
       console.log('Redirecting to:', authUrl);
-      
+
       // 跳转
       window.location.href = authUrl;
     }
@@ -231,7 +272,7 @@
     // 3. 页面加载时检查回调
     async function init() {
       document.getElementById('endpoint-display').textContent = CONFIG.argonBaseUrl;
-      
+
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       const state = urlParams.get('state');
@@ -301,30 +342,32 @@
       });
 
       if (!userRes.ok) throw new Error('获取用户信息失败');
-      
+
       const userInfo = await userRes.json();
-      
+
       // 渲染界面
       renderUserInfo(userInfo, accessToken, tokenData.scope);
     }
 
     // 5. 渲染用户界面
     function renderUserInfo(user, token, scope) {
-      document.getElementById('login-view').classList.add('hidden');
-      document.getElementById('user-view').classList.remove('hidden');
+      document.getElementById('login-view').classList.add('hidden')
+      document.getElementById('user-view').classList.remove('hidden')
 
-      // 填充数据
-      document.getElementById('username').textContent = user.name || user.login || user.sub || 'Unknown';
-      document.getElementById('user-id').textContent = user.id || user.sub;
-      document.getElementById('provider-badge').textContent = `via ${user.provider || 'OAuth'}`;
-      document.getElementById('user-scope').textContent = scope;
-      
-      // 处理头像 (不同提供商字段可能不同)
-      const avatar = user.avatar_url || user.picture || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.login || user.sub || 'U');
-      document.getElementById('avatar').src = avatar;
+      // ✅ 正确优先级：login > name > sub > id
+      const username = user.login || user.name || user.sub || user.id || 'Unknown'
+      document.getElementById('username').textContent = username
 
-      // 显示 Token
-      document.getElementById('token-display').textContent = token;
+      // ✅ 正确获取头像
+      const avatar = user.avatar_url || user.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}`
+      document.getElementById('avatar').src = avatar
+
+      // ✅ 显示数字 ID（如果需要）
+      document.getElementById('user-id').textContent = user.id || user.sub || 'N/A'
+
+      document.getElementById('provider-badge').textContent = `via ${user.provider || 'GitHub'}`
+      document.getElementById('user-scope').textContent = scope
+      document.getElementById('token-display').textContent = token
     }
 
     // 6. 退出登录
@@ -348,4 +391,5 @@
     window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
+
 </html>
