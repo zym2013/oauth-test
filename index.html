@@ -203,7 +203,11 @@
       clientId: 'test2-client',
       // 必须与你在 Argon OAuth KV 中注册的 redirectUri 完全一致
       redirectUri: window.location.origin + window.location.pathname,
-      scopes: ['read:user', 'user:email']
+      scopes: {
+        github: 'read:user user:email',
+        cpoauth: 'openid profile email',  // ✅ CPOAuth 标准 scopes
+        arctower: 'openid profile'         // ArcTower 可能类似
+      }
     };
 
     // ================= 状态管理 =================
@@ -237,36 +241,39 @@
 
     // 2. 处理登录点击
     async function handleLogin() {
-      showError('');
-
+      showError('')
+      
       // 生成 PKCE 参数
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = await generateCodeChallenge(codeVerifier);
-
-      // 保存 verifier 到 sessionStorage (回调时会用到)
-      sessionStorage.setItem('argon_code_verifier', codeVerifier);
-
+      const codeVerifier = generateCodeVerifier()
+      const codeChallenge = await generateCodeChallenge(codeVerifier)
+      
+      // 保存 verifier 到 sessionStorage
+      sessionStorage.setItem('argon_code_verifier', codeVerifier)
+      
       // 生成 state 防止 CSRF
-      const state = btoa(crypto.randomUUID()).replace(/=/g, '');
-      sessionStorage.setItem('argon_state', state);
-
+      const state = btoa(crypto.randomUUID()).replace(/=/g, '')
+      sessionStorage.setItem('argon_state', state)
+    
+      // ✅ 根据选中的 provider 获取对应的 scopes
+      const scopes = CONFIG.scopes[selectedProvider] || 'openid profile'
+      
       // 构造授权 URL
       const params = new URLSearchParams({
         client_id: CONFIG.clientId,
         redirect_uri: CONFIG.redirectUri,
         response_type: 'code',
-        scope: CONFIG.scopes.join(' '),
+        scope: scopes,  // ✅ 使用动态 scope
         state: state,
         code_challenge: codeChallenge,
         code_challenge_method: 'S256',
         provider: selectedProvider
-      });
-
-      const authUrl = `${CONFIG.argonBaseUrl}/oauth/authorize?${params.toString()}`;
-      console.log('Redirecting to:', authUrl);
-
+      })
+    
+      const authUrl = `${CONFIG.argonBaseUrl}/oauth/authorize?${params.toString()}`
+      console.log('Redirecting to:', authUrl)
+      
       // 跳转
-      window.location.href = authUrl;
+      window.location.href = authUrl
     }
 
     // 3. 页面加载时检查回调
@@ -353,21 +360,51 @@
     function renderUserInfo(user, token, scope) {
       document.getElementById('login-view').classList.add('hidden')
       document.getElementById('user-view').classList.remove('hidden')
-
-      // ✅ 正确优先级：login > name > sub > id
+    
+      // ✅ 正确优先级：login > name > sub
       const username = user.login || user.name || user.sub || user.id || 'Unknown'
       document.getElementById('username').textContent = username
-
-      // ✅ 正确获取头像
+      
+      // ✅ 头像：avatar_url > picture > fallback
       const avatar = user.avatar_url || user.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}`
       document.getElementById('avatar').src = avatar
-
-      // ✅ 显示数字 ID（如果需要）
-      document.getElementById('user-id').textContent = user.id || user.sub || 'N/A'
-
-      document.getElementById('provider-badge').textContent = `via ${user.provider || 'GitHub'}`
+      
+      // ✅ 显示提供商
+      document.getElementById('provider-badge').textContent = `via ${user.provider || 'OAuth'}`
+      
+      // ✅ 显示邮箱（如果有）
+      const emailInfo = user.email ? `<br/><small>Email: ${user.email}${user.email_verified ? ' ✓' : ' (未验证)'}</small>` : ''
+      
+      // ✅ 显示 User ID
+      document.getElementById('user-id').textContent = user.sub || user.id || 'N/A'
+      
+      // ✅ 显示 Scope
       document.getElementById('user-scope').textContent = scope
+      
+      // ✅ 显示 Token
       document.getElementById('token-display').textContent = token
+      
+      // ✅ 如果有竞赛编程信息，显示额外信息
+      const extraInfoDiv = document.createElement('div')
+      extraInfoDiv.style.marginTop = '1rem'
+      extraInfoDiv.style.fontSize = '0.9rem'
+      
+      let extraHtml = ''
+      
+      if (user.linked_accounts && user.linked_accounts.length > 0) {
+        extraHtml += `<div><strong>关联账号:</strong> ${user.linked_accounts.map(acc => acc.platform).join(', ')}</div>`
+      }
+      
+      if (user.bio) {
+        extraHtml += `<div><strong>个人简介:</strong> ${user.bio}</div>`
+      }
+      
+      if (emailInfo) {
+        extraHtml += `<div>${emailInfo}</div>`
+      }
+      
+      extraInfoDiv.innerHTML = extraHtml
+      document.querySelector('.user-info').appendChild(extraInfoDiv)
     }
 
     // 6. 退出登录
